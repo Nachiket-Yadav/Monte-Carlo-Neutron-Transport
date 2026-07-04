@@ -29,6 +29,7 @@ class Particle {
 
             if (x > L) { // if the particle has traveled beyond the material length
                 status = 0; // mark the particle as transmitted
+                // std::cout << "Particle transmitted with position: " << x << " and s: " << s << "\n" ; 
             }
             else if (x < 0) { // if the particle has traveled back beyond the material boundary
                 status = 1; // mark the particle as reflected
@@ -39,14 +40,12 @@ class Particle {
         } 
 
         void checkCollision(double c, double u) { // c is the scattering probability, u is the random number generated to determine if a collision occurs
-            if (u < c) {
+            if (u <= c) {
                 status = 3; // neutron absorbed 
-                std::cout << "Particle absorbed.\n";
             }
             else {
                 mu = 2.0 * u - 1.0; // update the direction of the particle after scattering, assuming isotropic scattering in 1D
                 status = 4; // particle travelling
-                std::cout << "Particle still travelling.\n";
             }
         }
 };
@@ -76,45 +75,80 @@ class Material {
 };
 
 int main() {
-    std::random_device rd;
-    std::mt19937 engine(rd());
-    std::uniform_real_distribution<double> uniform(0.0,1.0); // uniform distribution in the range [0.0, 1.0).    
-
-    double lambda = 1.0; // example value, replace with actual lambda
+    
+    double lambda = 2.0; // example value, replace with actual lambda
     double mfp = 1.0 / lambda; // mean free path
 
-    Material material(5.0 * mfp, 0.0); // Create a material with length 5 times the mean free path and scattering probability of 0.5
-    Particle particle;
+    Material material(5.0 * mfp, 1.0); // Create a material with length 5 times the mean free path and scattering probability of 0.5
+    //Particle particle;
 
-    while (particle.status == 4) { // while the particle is still travelling
+    int numSample = 1000; // number of particles to simulate
+    std::vector<int> results(3, 0); // vector to store the results of each particle simulation
 
-        double u = uniform(engine); // generate a random number for the exponential distribution
-        while (u <= 0.0) { // ensure u is in (0,1) to avoid log(0)
-            u = uniform(engine);
-        }
-        double freePath = -std::log(u) / lambda; // calculate the distance to the next collision based on the exponential distribution
+    // results[0] = number of transmitted particles
+    // results[1] = number of reflected particles
+    // results[2] = number of absorbed particles
 
-        particle.updatePos(freePath, material.getLength()); // update the particle's position and status based on the distance traveled
+    for (int i = 0; i < numSample; ++i) {
 
+        // Re-seed for each particle to ensure randomness in the simulation
+        std::random_device rd;
+        std::mt19937 engine(rd());
+        std::uniform_real_distribution<double> uniform(0.0,1.0); // uniform distribution in the range [0.0, 1.0).    
 
-        if (particle.status == 0) {
-                std::cout << "Particle transmitted.\n";
+        Particle particle = Particle(); // reset particle for each simulation
+
+        while (particle.status == 4) { // while the particle is still travelling
+
+            // --------- Particle propagation ---------
+            double u = uniform(engine); // generate a random number for the exponential distribution
+            while (u <= 0.0) { // ensure u is in (0,1) to avoid log(0)
+                u = uniform(engine);
             }
-            else if (particle.status == 1) {
-                std::cout << "Particle reflected.\n";
-            }
-            else if (particle.status == 2) {
-                std::cout << "Particle still in material, check for collision.\n";
-                particle.checkCollision(material.getScatteringProbability(), u);
+            double freePath = -std::log(u) / lambda; // calculate the distance to the next collision based on the exponential distribution
+            particle.updatePos(freePath, material.getLength()); // update the particle's position and status based on the distance traveled
+            // ----------------------------------------
 
+            // --------- Collision handling ---------
+            if (particle.status == 0) {
+                    //std::cout << "Particle transmitted.\n";
+                    results[0]++; // update transmitted count
+                }
+                else if (particle.status == 1) {
+                    //std::cout << "Particle reflected.\n";
+                    results[1]++; // update reflected count
+                }
+                else if (particle.status == 2) {
+
+                    //std::cout << "Particle still in material, check for collision.\n";
+                    double u = uniform(engine); // generate a random number for the exponential distribution
+                    while (u <= 0.0) { // ensure u is in (0,1) to avoid log(0)
+                        u = uniform(engine);
+                    }
+                    particle.checkCollision(material.getScatteringProbability(), u);
+
+                    if (particle.status == 3) {
+                        //std::cout << "Particle absorbed.\n";
+                        results[2]++; // update absorbed count
+                    }
+                    else if (particle.status == 4) {
+                        //std::cout << "Particle travelling.\n";
+                    }
+
+                }
+                else if (particle.status == 3) {
+                    //std::cout << "Particle absorbed.\n";
+                    results[2]++;
+                }
             }
-            else if (particle.status == 3) {
-                std::cout << "Particle absorbed.\n";
-            }
-            else if (particle.status == 4) {
-                std::cout << "Particle travelling.\n";
-            }
-        }
+        // ----------------------------------------
+    }
+
+    std::cout << "Simulation Results:\n";
+    std::cout << "Transmitted: " << results[0] << "\n";
+    std::cout << "Reflected: " << results[1] << "\n";
+    std::cout << "Absorbed: " << results[2] << "\n";
+
 
         return 0;
 }
