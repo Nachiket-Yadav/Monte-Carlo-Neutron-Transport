@@ -1,3 +1,9 @@
+// main.cpp
+// Monte Carlo neutron transport through a 1D slab.
+// Units: all lengths in mean free paths (Sigma_t = 1), so free path s = -ln(xi).
+// Build:  g++ -std=c++17 -O2 -Wall -Wextra -o neutron main.cpp
+// Run:    .\neutron.exe        (writes results.csv, prints a self-grading summary)
+
 #include <cmath>
 #include <fstream>
 #include <iomanip>
@@ -61,7 +67,7 @@ class Material {
  
         double getLength() const { return L; }
         double getScatteringProbability() const { return c; }
-        
+
 };
 
 // One clean roll in (0, 1): re-draw the (astronomically rare) exact 0
@@ -166,15 +172,21 @@ int main() {
     const long long N = 1'000'000;  // histories per configuration
     const unsigned seed = 42;       // To make every run reproducible
     std::mt19937 engine(seed); // Mersenne Twister engine, generates random numbers
- 
-    // Validations. 
-    // The c = 0 rows trace out the Beer-Lambert line - the case of the pure absorber.
-    // T = e^{-L}; c = 0.5 exercises every branch.
-    // c = 1 is the pure scatterer, which never absorbs.
-    const std::vector<std::pair<double, double>> configs = {  // {c, L}
-        {0.0, 1.0}, {0.0, 2.0}, {0.0, 3.0}, {0.0, 4.0}, {0.0, 5.0},
-        {0.5, 5.0},
-        {1.0, 5.0},
+    
+    //   vary L at c = 0        -> Beer-Lambert line T = e^{-L} - the case of the pure absorber.
+    //   vary c at L = 5        -> end state fractions vs scattering probability
+    //   vary N at c = 0, L = 2 -> 1/sqrt(N) convergence against the exact answer
+
+    struct Config { double c; double L; long long N; };
+    const std::vector<Config> configs = {
+        {0.0, 1.0, 1'000'000}, {0.0, 2.0, 1'000'000}, {0.0, 3.0, 1'000'000},
+        {0.0, 4.0, 1'000'000}, {0.0, 5.0, 1'000'000},
+        {0.1, 5.0, 1'000'000}, {0.2, 5.0, 1'000'000}, {0.3, 5.0, 1'000'000},
+        {0.4, 5.0, 1'000'000}, {0.5, 5.0, 1'000'000}, {0.6, 5.0, 1'000'000},
+        {0.7, 5.0, 1'000'000}, {0.8, 5.0, 1'000'000}, {0.9, 5.0, 1'000'000},
+        {1.0, 5.0, 1'000'000},
+        {0.0, 2.0, 100}, {0.0, 2.0, 1'000}, {0.0, 2.0, 10'000},
+        {0.0, 2.0, 100'000}, {0.0, 2.0, 10'000'000},
     };
  
     std::ofstream out("results.csv");
@@ -188,20 +200,19 @@ int main() {
     std::cout << std::setprecision(6);
     bool allPass = true;
  
-    for (const auto& [c, L] : configs) {
-        Material material(L, c);  // constructor takes (length, scatterProb)
-        Tally tally = runBatch(material, N, engine);
-        writeCsvRow(out, c, L, N, seed, tally);
-        
-        // TRA fractions/probabilities
-        double T = static_cast<double>(tally.transmitted) / N;
-        double R = static_cast<double>(tally.reflected)   / N;
-        double A = static_cast<double>(tally.absorbed)    / N;
-        double Terr = std::sqrt(T * (1.0 - T) / N);
- 
-        std::cout << "c = " << c << "  L = " << L
+    for (const auto& [c, L, n] : configs) {
+        Material material(L, c);  // note: constructor takes (length, scatterProb)
+        Tally tally = runBatch(material, n, engine);
+        writeCsvRow(out, c, L, n, seed, tally);
+
+        double T = static_cast<double>(tally.transmitted) / n;
+        double R = static_cast<double>(tally.reflected)   / n;
+        double A = static_cast<double>(tally.absorbed)    / n;
+        double Terr = std::sqrt(T * (1.0 - T) / n);
+
+        std::cout << "c = " << c << "  L = " << L << "  N = " << n
                   << "  |  T = " << T << "  R = " << R << "  A = " << A;
- 
+
         if (c == 0.0) {
             // Pre-registered expectation: T within 3 standard errors of e^{-L},
             // and reflection impossible without a scatter.
@@ -219,9 +230,8 @@ int main() {
         }
         std::cout << '\n';
     }
- 
+
     std::cout << (allPass ? "All checks passed." : "SOME CHECKS FAILED.")
               << "  Wrote results.csv\n";
     return allPass ? 0 : 1;
-
 }
